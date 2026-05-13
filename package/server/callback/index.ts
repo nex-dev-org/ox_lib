@@ -4,8 +4,6 @@ const pendingCallbacks: Record<string, (...args: any[]) => void> = {};
 const callbackTimeout = GetConvarInt('ox:callbackTimeout', 300000);
 
 onNet(`__ox_cb_${cache.resource}`, (key: string, ...args: any) => {
-  if (!source) return;
-
   const resolve = pendingCallbacks[key];
 
   if (!resolve) return;
@@ -15,35 +13,19 @@ onNet(`__ox_cb_${cache.resource}`, (key: string, ...args: any) => {
   resolve(...args);
 });
 
-const eventTimers: Record<string, number> = {};
-
-export function eventTimer(eventName: string, delay: number | null) {
-  if (delay && delay > 0) {
-    const currentTime = GetGameTimer();
-
-    if ((eventTimers[eventName] || 0) > currentTime) return false;
-
-    eventTimers[eventName] = currentTime + delay;
-  }
-
-  return true;
-}
-
-export function triggerServerCallback<T = unknown>(
+export function triggerClientCallback<T = unknown>(
   eventName: string,
-  delay: number | null,
+  playerId: number,
   ...args: any
 ): Promise<T> | void {
-  if (!eventTimer(eventName, delay)) return;
-
   let key: string;
 
   do {
-    key = `${eventName}:${Math.floor(Math.random() * (100000 + 1))}`;
+    key = `${eventName}:${Math.floor(Math.random() * (100000 + 1))}:${playerId}`;
   } while (pendingCallbacks[key]);
 
-  emitNet(`ox_lib:validateCallback`, eventName, cache.resource, key);
-  emitNet(`__ox_cb_${eventName}`, cache.resource, key, ...args);
+  emitNet(`ox_lib:validateCallback`, playerId, eventName, cache.resource, key);
+  emitNet(`__ox_cb_${eventName}`, playerId, cache.resource, key, ...args);
 
   return new Promise<T>((resolve, reject) => {
     pendingCallbacks[key] = (args) => {
@@ -56,19 +38,20 @@ export function triggerServerCallback<T = unknown>(
   });
 }
 
-export function onServerCallback(eventName: string, cb: (...args: any[]) => any) {
-  exports.ox_lib.setValidCallback(eventName, true)
+export function onClientCallback(eventName: string, cb: (playerId: number, ...args: any[]) => any) {
+  exports.ox_lib.setValidCallback(eventName, true);
 
   onNet(`__ox_cb_${eventName}`, async (resource: string, key: string, ...args: any[]) => {
+    const src = source;
     let response: any;
 
     try {
-      response = await cb(...args);
+      response = await cb(src, ...args);
     } catch (e: any) {
       console.error(`an error occurred while handling callback event ${eventName}`);
       console.log(`^3${e.stack}^0`);
     }
 
-    emitNet(`__ox_cb_${resource}`, key, response);
+    emitNet(`__ox_cb_${resource}`, src, key, response);
   });
 }
