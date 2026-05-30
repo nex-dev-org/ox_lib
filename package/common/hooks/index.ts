@@ -112,12 +112,12 @@ export class HookPipeline<T = any> {
       const runHook = this.filter?.(hook, payload) !== false;
       const rejected = runHook && hook.cb?.(payload) === false;
 
+      if (runHook) events.push(hook.hookId);
+
       if (rejected) {
         result.ok = false;
         break;
       }
-
-      if (runHook) events.push(hook.hookId);
     }
 
     result.size = events.length;
@@ -134,7 +134,7 @@ class EventHook {
   constructor(
     readonly hookId: string,
     readonly resource: string,
-    readonly event: string
+    readonly event: string,
   ) {}
 
   /**
