@@ -1,6 +1,6 @@
 {
   "name": "@overextended/ox_lib",
-  "version": "3.36.3",
+  "version": "3.37.0",
   "description": "JS/TS wrapper for ox_lib exports",
   "keywords": [
     "fivem",
@@ -51,7 +51,7 @@
     "compile": "tsdown --",
     "lint": "oxlint",
     "format": "oxfmt",
-    "prepublishOnly": "bun run format & bun run compile"
+    "prepublishOnly": "bun run compile"
   },
   "dependencies": {
     "@overextended/core": "^0.2.5",

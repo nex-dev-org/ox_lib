@@ -1,5 +1,5 @@
 import { Vector3 } from '@overextended/core/vector';
-import { context, Player } from '../..';
+import { context } from '../..';
 
 const isServer = context === 'server';
 const allowStateBagReplication = isServer || !GetConvarBool('sv_stateBagStrictMode', false);
@@ -14,24 +14,29 @@ enum StateBagReplication {
 export abstract class GameEntity {
   #handle: number = 0;
   readonly type: string = '';
+  /** The entity's network id. */
   readonly netId: number = 0;
-  protected statebag: string = ''
+  protected statebag: string = '';
 
   /** Writes a value to the entity's state. Replicated values are validated by the server. */
-  public async set(key: string, value: unknown, mode?: StateBagReplication) {
+  public async set(key: string, value: unknown, mode?: StateBagReplication): Promise<boolean> {
+    if (mode && !this.netId) mode = undefined;
+  
     if ((mode === 1 && !allowStateBagReplication) || mode === 2) {
-      if (mode === 2 && this! instanceof Player) {
-        throw new Error('Setting synced-states is not supported for non-player entities.')
+      if (mode === 2 && this.type !== 'Player') {
+        throw new Error('Setting synced-states is not supported for non-player entities.');
       }
 
       if (!isServer) {
-        return import('../../../client/callback').then(
+        const ok = await import('../../../client/callback').then(
           (m) =>
             m.triggerServerCallback('ox_lib:requestSetStateBag', null, this.statebag, key, value) as Promise<boolean>,
         );
+
+        return ok ? this.set(key, value) : false;
       }
 
-      emitNet('ox_lib:setStateBagValue', this.netId, key, value)
+      emitNet('ox_lib:setStateBagValue', this.netId, key, value);
     }
 
     // @ts-ignore
@@ -43,12 +48,12 @@ export abstract class GameEntity {
 
   /** Writes a replicated value to the entity's state. Client-set values are validated by the server. */
   public async setr(key: string, value: unknown) {
-    return this.set(key, value, 1)
+    return this.set(key, value, 1);
   }
 
   /** Writes a synced value to the entity's state. Client-set values are validated by the server. */
   public async sets(key: string, value: unknown) {
-    return this.set(key, value, 2)
+    return this.set(key, value, 2);
   }
 
   /** Returns a value from the entity's state. */
@@ -66,19 +71,18 @@ export abstract class GameEntity {
     return GetStateBagKeys(this.statebag);
   }
 
+  /** The entity's script handle */
   public get handle() {
     return this.#handle;
   }
 
   protected setHandle(handle: number) {
-    const isPlayer = this instanceof Player;
-  
+    const isPlayer = this.type === 'Player';
+    const playerId = isPlayer && ((this as any).playerId as number);
     this.#handle = handle;
-    // @ts-ignore
-    this.netId = NetworkGetNetworkIdFromEntity(handle);
-    this.statebag = this.netId
-      ? `${isPlayer ? 'player' : 'entity'}:${this.netId}`
-      : `localEntity:${handle}`;
+    // @ts-expect-error
+    this.netId = playerId ? (isServer ? playerId : GetPlayerServerId(playerId)) : NetworkGetNetworkIdFromEntity(handle);
+    this.statebag = this.netId ? `${isPlayer ? 'player' : 'entity'}:${this.netId}` : `localEntity:${handle}`;
 
     if (!this.netId || (isServer && !isPlayer)) {
       EnsureEntityStateBag(handle);
