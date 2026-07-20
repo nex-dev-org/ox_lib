@@ -31,13 +31,28 @@ end
 
 -- Attempt a cross-resource export call. Returns (true, result) on success,
 -- (false, nil) on any error. The caller falls back to the native on false.
+--
+-- "No such export" falls back SILENTLY: on client join the pack's resource
+-- state already reads 'started' before its scripts have executed, so every
+-- boot-time forward hits that error and then self-heals (callbacks are
+-- replayed by the onClientResourceStart handler below). It's equally the
+-- expected shape when the pack is absent or outdated — never a reason to
+-- spam the console. Anything else is a real error inside the pack's export
+-- and is logged once per distinct failure.
+local warned = {}
+
 local function tryPack(name, ...)
     if not packActive() then return false end
     local ok, result = pcall(function(...)
         return exports[PACK][name](exports[PACK], ...)
     end, ...)
     if not ok then
-        print(('[ox_lib bridge] %s forward failed, falling back to native: %s'):format(name, tostring(result)))
+        local msg = tostring(result)
+        local key = name .. '|' .. msg
+        if not msg:find('No such export', 1, true) and not warned[key] then
+            warned[key] = true
+            print(('[ox_lib bridge] %s forward failed, falling back to native: %s'):format(name, msg))
+        end
         return false
     end
     return true, result
