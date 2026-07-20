@@ -14,7 +14,7 @@
     client file runs. No other ox_lib file needs to be touched.
 ]]
 
-local PACK = 'nex_uipack'
+local PACK = 'nexdev_uipack'
 
 -- Cache the real natives so fallback and restart paths still work after the
 -- globals have been overridden below.
